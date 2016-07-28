@@ -18,28 +18,38 @@
 package org.apache.beam.sdk.io.mongodb;
 
 import static de.flapdoodle.embed.mongo.distribution.Version.Main.PRODUCTION;
+import static org.junit.Assert.assertEquals;
 
+import com.google.common.collect.ImmutableList;
+import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.coders.BigEndianIntegerCoder;
+import org.apache.beam.sdk.coders.BigEndianLongCoder;
+import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.testing.NeedsRunner;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.Count;
 import org.apache.beam.sdk.transforms.Create;
+import org.apache.beam.sdk.transforms.SerializableFunction;
+import org.apache.beam.sdk.transforms.Values;
+import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 
 import com.mongodb.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
+import org.apache.commons.lang3.SerializationUtils;
 import org.bson.Document;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.joda.time.Instant;
+import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.List;
 
 import de.flapdoodle.embed.mongo.MongodExecutable;
 import de.flapdoodle.embed.mongo.MongodStarter;
@@ -47,6 +57,8 @@ import de.flapdoodle.embed.mongo.config.IMongodConfig;
 import de.flapdoodle.embed.mongo.config.MongodConfigBuilder;
 import de.flapdoodle.embed.mongo.config.Net;
 import de.flapdoodle.embed.process.runtime.Network;
+
+import javax.annotation.Nullable;
 
 /**
  * Test on the MongoDbIO.
@@ -56,8 +68,8 @@ public class MongoDbIOTest {
   private static final Logger LOGGER = LoggerFactory.getLogger(MongoDbIOTest.class);
 
   private static final int PORT = 27017;
-  private static final String DATABASE = "beam";
-  private static final String COLLECTION = "test";
+  private static final String DATABASE = "test";
+  private static final String COLLECTION = "scientist";
 
   private MongodExecutable mongodExecutable;
 
@@ -73,7 +85,7 @@ public class MongoDbIOTest {
 
     LOGGER.info("Insert test data");
 
-    MongoClient client = new MongoClient("0.0.0.0", PORT);
+    MongoClient client = new MongoClient("127.0.0.1", PORT);
     MongoDatabase database = client.getDatabase(DATABASE);
 
     MongoCollection collection = database.getCollection(COLLECTION);
@@ -97,7 +109,7 @@ public class MongoDbIOTest {
     mongodExecutable.stop();
   }
 
-  @Test
+@Test
   @Category(NeedsRunner.class)
   public void testFullRead() throws Exception {
     TestPipeline pipeline = TestPipeline.create();
@@ -107,9 +119,9 @@ public class MongoDbIOTest {
           .withUri("mongodb://localhost:" + PORT)
           .withDatabase(DATABASE)
           .withCollection(COLLECTION));
-
-    PAssert.thatSingleton(output.apply("Count", Count.<String>globally()))
-        .isEqualTo(new Long(1000));
+  PAssert
+          .thatSingleton(output.apply("Count",Count.<String>globally()))
+          .isEqualTo(1000L);
 
     pipeline.run();
   }
@@ -127,11 +139,11 @@ public class MongoDbIOTest {
         .withFilter("{\"scientist\":\"Einstein\"}"));
 
     PAssert.thatSingleton(output.apply("Count", Count.<String>globally()))
-        .notEqualTo(new Long(1000));
+        .isEqualTo(new Long(100));
 
     pipeline.run();
   }
-
+/*
   @Test
   @Category(NeedsRunner.class)
   public void testWrite() throws Exception {
@@ -162,5 +174,36 @@ public class MongoDbIOTest {
     Assert.assertEquals(count, 100);
 
   }
+*/
+/*
+  @Test
+  @Ignore
+  public void rowSerialable() throws Exception {
+    //prepare(1, 1);
+    String uri="mongodb://localhost:27017";
+    String database="test";
+    String collection="arbre";
+    String filter=null;
+    MongoDbIO.BoundedMongoDbSource source = new MongoDbIO.BoundedMongoDbSource(uri, database,collection,filter);
+    List<? extends BoundedSource> boundedSources = source.splitIntoBundles(source
+                    .getEstimatedSizeBytes(null),
+            null);
+    assertEquals(1, boundedSources.size());
+    for (BoundedSource boundedSource : boundedSources) {
+      MongoDbIO.BoundedMongoDbReader reader = (MongoDbIO.BoundedMongoDbReader) boundedSource
+              .createReader(null);
+      try {
+        for (boolean available = reader.start(); available; available = reader.advance()) {
+          //CassandraRow current = reader.getCurrent();
+          //Serializable original = current;
+          //Serializable copy = SerializationUtils.clone(original);
+          //System.out.print(copy);
+        }
+      } finally {
+        reader.close();
+      }
+    }
 
+  }
+*/
 }

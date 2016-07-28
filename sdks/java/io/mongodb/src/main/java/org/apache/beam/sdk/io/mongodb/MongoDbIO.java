@@ -17,11 +17,14 @@
  */
 package org.apache.beam.sdk.io.mongodb;
 
+import com.mongodb.*;
+import com.mongodb.client.model.Filters;
 import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.SerializableCoder;
 import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.Filter;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.display.DisplayData;
@@ -33,16 +36,20 @@ import org.apache.beam.sdk.values.PInput;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-import com.mongodb.MongoClient;
-import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 
+import com.mongodb.client.FindIterable;
+import static com.mongodb.client.model.Filters.*;
+
+import org.bson.BsonDocument;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import javax.annotation.Nullable;
 
@@ -176,7 +183,7 @@ public class MongoDbIO {
 
   }
 
-  private static class BoundedMongoDbSource extends BoundedSource {
+  protected static class BoundedMongoDbSource extends BoundedSource {
 
     private String uri;
     private String database;
@@ -210,28 +217,105 @@ public class MongoDbIO {
 
     @Override
     public BoundedReader createReader(PipelineOptions options) {
+      //System.out.println(splitIntoBundles(100000,options));
       return new BoundedMongoDbReader(uri, database, collection, filter);
     }
 
     @Override
     public long getEstimatedSizeBytes(PipelineOptions pipelineOptions) {
-      // TODO implement a way to return the estimated size
-      return 0L;
+      Long estimatedByteSize = 0L;
+      Long totalCfByteSize = 0L;
+      Long avgSize = 0L;
+
+      MongoClient client = new MongoClient();
+      MongoDatabase db = client.getDatabase(database);
+      MongoCollection inputCollection = db.getCollection(collection);
+
+      // Stats object
+      BasicDBObject stat = new BasicDBObject();
+      stat.append("collStats",collection);
+      Document stats = db.runCommand(stat);
+      // Check if better way to get the Long value
+      totalCfByteSize = Long.valueOf(stats.get("size").toString());
+      avgSize = Long.valueOf(stats.get("avgObjSize").toString());
+      if(filter != null && !filter.isEmpty()){
+        try {
+          estimatedByteSize = getFilterResultByteSize(inputCollection,avgSize);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }else{
+        estimatedByteSize = totalCfByteSize;
+      }
+      return estimatedByteSize;
+    }
+
+    private Long getFilterResultByteSize(MongoCollection inputCollection, Long avgSize) throws Exception{
+      Long totalFilterByteSize = 0L;
+      Document bson = Document.parse(filter);
+      long countFilter = inputCollection.count(bson);
+      totalFilterByteSize = countFilter * avgSize;
+      return totalFilterByteSize;
     }
 
     @Override
     public List<BoundedSource> splitIntoBundles(long desiredBundleSizeBytes,
                                                 PipelineOptions options) {
+      Long numSplits = 0L;
       // an unique source is returned for now (no split)
-      // TODO implement split as MongoDB collection supports it
       List<BoundedSource> sourceList = new ArrayList<>();
-      sourceList.add(this);
+      MongoClient client = new MongoClient();
+      MongoDatabase db = client.getDatabase(database);
+
+      if(desiredBundleSizeBytes > 0){
+        numSplits = getEstimatedSizeBytes(options) / desiredBundleSizeBytes;
+      }
+      if (numSplits <= 0) {
+        numSplits = 1L;
+      }
+
+      if (numSplits == 1) {
+        sourceList.add(this);
+        return sourceList;
+      }
+      // get the key ranges
+      BasicDBObject split = new BasicDBObject();
+      split.append("splitVector",database + "." + collection);
+      BasicDBObject keyPatternValue = new BasicDBObject();
+      keyPatternValue.append("_id",1);
+      split.append("keyPattern",keyPatternValue);
+      split.append("force",false);
+      split.append("maxChunkSizeBytes",desiredBundleSizeBytes);
+      Document data = db.runCommand(split);
+      final ArrayList splitData = (ArrayList) data.get("splitKeys");
+      String lastKey = null; // Lower boundary of the first min split
+      int ind=0;
+      // create new filter and add the split
+      // TODO: Manage the query with filter
+      for (final Object aSplitData : splitData) {
+        final Document  currentDoc = (Document) aSplitData;
+        String currentKey = currentDoc.get("_id").toString();
+        String newFilter = null;
+        if(ind == 0){
+          newFilter = "{\"_id\":{$lte:ObjectId(\""+ currentKey.toString() + "\")}}";
+        }else if(ind == (splitData.size()-1)){
+          newFilter = "{\"_id\":{$gt:ObjectId(\""+ lastKey.toString() + "\")," +
+                  "$lt:ObjectId(\""+ currentKey.toString() + "\")}}";
+          sourceList.add(new BoundedMongoDbSource(uri,database,collection,newFilter));
+          newFilter = "{\"_id\":{$gt:ObjectId(\""+ currentKey.toString() + "\")}}";
+        }else{
+          newFilter = "{\"_id\":{$gt:ObjectId(\""+ lastKey.toString() + "\")," +
+                                "$lte:ObjectId(\""+ currentKey.toString() + "\")}}";
+        }
+        sourceList.add(new BoundedMongoDbSource(uri,database,collection,newFilter));
+        lastKey = currentKey;
+        ind++;
+      }
       return sourceList;
     }
-
   }
 
-  private static class BoundedMongoDbReader extends BoundedSource.BoundedReader {
+  protected static class BoundedMongoDbReader extends BoundedSource.BoundedReader {
 
     private String uri;
     private String database;
