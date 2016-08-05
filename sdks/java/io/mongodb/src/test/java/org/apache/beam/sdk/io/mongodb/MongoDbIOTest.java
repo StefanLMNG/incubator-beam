@@ -76,16 +76,16 @@ public class MongoDbIOTest {
   @Before
   public void setup() throws Exception {
     LOGGER.info("Starting MongoDB embedded instance");
-    IMongodConfig mongodConfig = new MongodConfigBuilder()
+    /*IMongodConfig mongodConfig = new MongodConfigBuilder()
         .version(PRODUCTION)
         .net(new Net(PORT, Network.localhostIsIPv6()))
         .build();
     mongodExecutable = MongodStarter.getDefaultInstance().prepare(mongodConfig);
     mongodExecutable.start();
-
+*/
     LOGGER.info("Insert test data");
 
-    MongoClient client = new MongoClient("127.0.0.1", PORT);
+    MongoClient client = new MongoClient("localhost", PORT);
     MongoDatabase database = client.getDatabase(DATABASE);
 
     MongoCollection collection = database.getCollection(COLLECTION);
@@ -105,7 +105,7 @@ public class MongoDbIOTest {
   @After
   public void stop() throws Exception {
     LOGGER.info("Stopping MongoDB instance");
-    mongodExecutable.stop();
+    //mongodExecutable.stop();
   }
 
 @Test
@@ -144,25 +144,35 @@ public class MongoDbIOTest {
 
   @Test
   @Category(NeedsRunner.class)
-  public void testNumberSplitSizeFullCollection() throws Exception {
+  public void testNumberSplitFullCollection() throws Exception {
+    TestPipeline pipeline = TestPipeline.create();
+
+    PCollection<String> output = pipeline.apply(
+            MongoDbIO.read()
+                    .withUri("mongodb://localhost:" + PORT)
+                    .withDatabase(DATABASE)
+                    .withCollection(COLLECTION));
+
+    pipeline.run();
+
+
+  }
+
+  @Test
+  @Category(NeedsRunner.class)
+  public void testNumberSplitFullCollectionUserValue() throws Exception {
     String uri="mongodb://localhost:27017";
     String database="test";
     String collection="scientist";
     String filter=null;
-    Long desiredBundleSize = 200L;
-    int numberSplit = 0;
+    Long desiredBundleSize = 100L;
+    int numberSplit = 300;
     MongoDbIO.BoundedMongoDbSource source = new MongoDbIO.BoundedMongoDbSource(uri, database,collection,filter,numberSplit);
     Long fullSize = source.getEstimatedSizeBytes(null);
     List<? extends BoundedSource> boundedSources = source.splitIntoBundles(desiredBundleSize,
             null);
     // test number of split generated
-    assertEquals(334L, boundedSources.size());
-    for (BoundedSource boundedSource : boundedSources) {
-      MongoDbIO.BoundedMongoDbReader reader = (MongoDbIO.BoundedMongoDbReader) boundedSource
-              .createReader(null);
-      // test size of split
-      //assertEquals(200L,boundedSource.getEstimatedSizeBytes(null));
-    }
+    assertEquals(300, boundedSources.size());
   }
 
   @Test
@@ -191,14 +201,17 @@ public class MongoDbIOTest {
       count = count + 1;
       cursor.next();
     }
-    Assert.assertEquals(count, 100);
+    Assert.assertEquals(100, count);
   }
 
   @Test (expected = Pipeline.PipelineExecutionException.class)
   @Category(NeedsRunner.class)
   public void testWriteWithErrors() throws Exception {
     TestPipeline pipeline = TestPipeline.create();
-
+    MongoClient client = new MongoClient("localhost", PORT);
+    MongoDatabase database = client.getDatabase("test");
+    MongoCollection collection = database.getCollection("test");
+    collection.drop();
     ArrayList<String> data = new ArrayList<>();
     for (int i = 0; i < 100; i++) {
       data.add("{\"scientist\":\"Test\"}");
@@ -211,9 +224,7 @@ public class MongoDbIOTest {
 
     pipeline.run();
 
-    MongoClient client = new MongoClient("localhost", PORT);
-    MongoDatabase database = client.getDatabase("test");
-    MongoCollection collection = database.getCollection("test");
+
 
     MongoCursor cursor = collection.find().iterator();
 

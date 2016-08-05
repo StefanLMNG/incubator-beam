@@ -167,7 +167,6 @@ public class MongoDbIO {
         @Override
         public void populateDisplayData(DisplayData.Builder builder) {
             super.populateDisplayData(builder);
-
             builder.addIfNotNull(DisplayData.item("uri", uri));
             builder.addIfNotNull(DisplayData.item("database", database));
             builder.addIfNotNull(DisplayData.item("collection", collection));
@@ -217,7 +216,7 @@ public class MongoDbIO {
 
         @Override
         public BoundedReader createReader(PipelineOptions options) {
-            System.out.println(splitIntoBundles(50, options));
+            //System.out.println(splitIntoBundles(50, options));
             return new BoundedMongoDbReader(uri, database, collection, filter, numberSplit);
         }
 
@@ -507,14 +506,14 @@ public class MongoDbIO {
                 this.collection = collection;
             }
 
-            @Override
+            @StartBundle
             public void startBundle(Context c) throws Exception {
                 if (client == null) {
                     client = new MongoClient(new MongoClientURI(uri));
                 }
             }
 
-            @Override
+            @ProcessElement
             public void processElement(ProcessContext ctx) throws Exception {
                 String value = ctx.element();
 
@@ -527,7 +526,7 @@ public class MongoDbIO {
                 mongoCollection.insertOne(Document.parse(value));
             }
 
-            @Override
+            @FinishBundle
             public void finishBundle(Context c) throws Exception {
                 client.close();
                 client = null;

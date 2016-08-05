@@ -452,14 +452,14 @@ public class MongoDbIOSplitVector {
         this.collection = collection;
       }
 
-      @Override
+      @StartBundle
       public void startBundle(Context c) throws Exception {
         if (client == null) {
           client = new MongoClient(new MongoClientURI(uri));
         }
       }
 
-      @Override
+      @ProcessElement
       public void processElement(ProcessContext ctx) throws Exception {
         String value = ctx.element();
 
@@ -472,7 +472,7 @@ public class MongoDbIOSplitVector {
         mongoCollection.insertOne(Document.parse(value));
       }
 
-      @Override
+      @FinishBundle
       public void finishBundle(Context c) throws Exception {
         client.close();
         client = null;
