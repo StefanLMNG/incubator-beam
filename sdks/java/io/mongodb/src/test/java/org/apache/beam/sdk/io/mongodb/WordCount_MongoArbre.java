@@ -33,8 +33,8 @@ import java.io.IOException;
  * An example that counts words in Shakespeare and includes Beam best practices.
  *
  * <p>This class, {@link WordCount_MongoArbre}, is the second in a series of four successively more detailed
- * 'word count' examples. You may first want to take a look at {@link MinimalWordCount}.
- * After you've looked at this example, then see the {@link DebuggingWordCount}
+ * 'word count' examples. You may first want to take a look at
+ * After you've looked at this example, then see the
  * pipeline, for introduction of additional concepts.
  *
  * <p>For a detailed walkthrough of this example, see
@@ -199,6 +199,7 @@ public class WordCount_MongoArbre {
             .withDatabase("test")
             .withCollection("arbre")
             .withFilter("{field1:/.*JARDIN.*/}")
+            .withNumberSplit(450)
             )
      .apply(new CountWords())
      .apply(MapElements.via(new FormatAsTextFn()))

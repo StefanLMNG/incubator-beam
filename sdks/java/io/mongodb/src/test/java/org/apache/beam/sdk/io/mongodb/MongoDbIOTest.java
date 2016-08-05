@@ -100,7 +100,6 @@ public class MongoDbIOTest {
       document.append("scientist", scientists[index]);
       collection.insertOne(document);
     }
-
   }
 
   @After
@@ -121,7 +120,7 @@ public class MongoDbIOTest {
           .withCollection(COLLECTION));
   PAssert
           .thatSingleton(output.apply("Count",Count.<String>globally()))
-          .isEqualTo(1000L);
+          .isEqualTo(new Long(1000));
 
     pipeline.run();
   }
@@ -137,13 +136,35 @@ public class MongoDbIOTest {
         .withDatabase(DATABASE)
         .withCollection(COLLECTION)
         .withFilter("{\"scientist\":\"Einstein\"}"));
-
     PAssert.thatSingleton(output.apply("Count", Count.<String>globally()))
         .isEqualTo(new Long(100));
 
     pipeline.run();
   }
-/*
+
+  @Test
+  @Category(NeedsRunner.class)
+  public void testNumberSplitSizeFullCollection() throws Exception {
+    String uri="mongodb://localhost:27017";
+    String database="test";
+    String collection="scientist";
+    String filter=null;
+    Long desiredBundleSize = 200L;
+    int numberSplit = 0;
+    MongoDbIO.BoundedMongoDbSource source = new MongoDbIO.BoundedMongoDbSource(uri, database,collection,filter,numberSplit);
+    Long fullSize = source.getEstimatedSizeBytes(null);
+    List<? extends BoundedSource> boundedSources = source.splitIntoBundles(desiredBundleSize,
+            null);
+    // test number of split generated
+    assertEquals(334L, boundedSources.size());
+    for (BoundedSource boundedSource : boundedSources) {
+      MongoDbIO.BoundedMongoDbReader reader = (MongoDbIO.BoundedMongoDbReader) boundedSource
+              .createReader(null);
+      // test size of split
+      //assertEquals(200L,boundedSource.getEstimatedSizeBytes(null));
+    }
+  }
+
   @Test
   @Category(NeedsRunner.class)
   public void testWrite() throws Exception {
@@ -154,8 +175,8 @@ public class MongoDbIOTest {
       data.add("{\"scientist\":\"Test\"}");
     }
     pipeline.apply(Create.of(data))
-        .apply(MongoDbIO.write().withUri("mongodb://localhost:" + PORT).withDatabase("test")
-            .withCollection("test"));
+            .apply(MongoDbIO.write().withUri("mongodb://localhost:" + PORT).withDatabase(DATABASE)
+                    .withCollection("test"));
 
     pipeline.run();
 
@@ -170,11 +191,39 @@ public class MongoDbIOTest {
       count = count + 1;
       cursor.next();
     }
-
     Assert.assertEquals(count, 100);
-
   }
-*/
+
+  @Test (expected = Pipeline.PipelineExecutionException.class)
+  @Category(NeedsRunner.class)
+  public void testWriteWithErrors() throws Exception {
+    TestPipeline pipeline = TestPipeline.create();
+
+    ArrayList<String> data = new ArrayList<>();
+    for (int i = 0; i < 100; i++) {
+      data.add("{\"scientist\":\"Test\"}");
+    }
+    // Error generation
+    data.add("{\"_id\" : 1, \"scientist\":" + null);
+    pipeline.apply(Create.of(data))
+            .apply(MongoDbIO.write().withUri("mongodb://localhost:" + PORT).withDatabase(DATABASE)
+                    .withCollection("test"));
+
+    pipeline.run();
+
+    MongoClient client = new MongoClient("localhost", PORT);
+    MongoDatabase database = client.getDatabase("test");
+    MongoCollection collection = database.getCollection("test");
+
+    MongoCursor cursor = collection.find().iterator();
+
+    int count = 0;
+    while (cursor.hasNext()) {
+      count = count + 1;
+      cursor.next();
+    }
+    Assert.assertEquals(count, 100);
+  }
 /*
   @Test
   @Ignore
