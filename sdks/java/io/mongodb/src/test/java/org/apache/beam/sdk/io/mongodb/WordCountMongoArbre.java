@@ -17,22 +17,34 @@
  */
 package org.apache.beam.sdk.io.mongodb;
 
-import com.google.common.base.Strings;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
-import org.apache.beam.sdk.options.*;
-import org.apache.beam.sdk.transforms.*;
+import org.apache.beam.sdk.options.Default;
+import org.apache.beam.sdk.options.DefaultValueFactory;
+import org.apache.beam.sdk.options.Description;
+import org.apache.beam.sdk.options.PipelineOptions;
+import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.transforms.Aggregator;
+import org.apache.beam.sdk.transforms.Count;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.MapElements;
+import org.apache.beam.sdk.transforms.PTransform;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.SimpleFunction;
+import org.apache.beam.sdk.transforms.Sum;
 import org.apache.beam.sdk.util.IOChannelFactory;
 import org.apache.beam.sdk.util.IOChannelUtils;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import com.google.common.base.Strings;
 
 import java.io.IOException;
 
 /**
  * An example that counts words in Shakespeare and includes Beam best practices.
  *
- * <p>This class, {@link WordCount_MongoArbre}, is the second in a series of four successively more detailed
+ * <p>This class, {@link WordCountMongoArbre},
+ * is the second in a series of four successively more detailed
  * 'word count' examples. You may first want to take a look at
  * After you've looked at this example, then see the
  * pipeline, for introduction of additional concepts.
@@ -81,7 +93,7 @@ import java.io.IOException;
  * <p>The input file defaults to {@code gs://dataflow-samples/shakespeare/kinglear.txt} and can be
  * overridden with {@code --inputFile}.
  */
-public class WordCount_MongoArbre {
+public class WordCountMongoArbre {
 
   /**
    * Concept #2: You can make your pipeline code less verbose by defining your DoFns statically out-
@@ -127,7 +139,7 @@ public class WordCount_MongoArbre {
    * modular testing, and an improved monitoring experience.
    */
   public static class CountWords extends PTransform<PCollection<String>,
-      PCollection<KV<String, Long>>> {
+        PCollection<KV<String, Long>>> {
     @Override
     public PCollection<KV<String, Long>> apply(PCollection<String> lines) {
 
@@ -144,7 +156,7 @@ public class WordCount_MongoArbre {
   }
 
   /**
-   * Options supported by {@link WordCount_MongoArbre}.
+   * Options supported by {@link WordCountMongoArbre}.
    *
    * <p>Concept #4: Defining your own configuration options. Here, you can add your own arguments
    * to be processed by the command-line parser, and specify default values for them. You can then
